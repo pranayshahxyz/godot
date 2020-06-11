@@ -160,93 +160,133 @@ void Label::_notification(int p_what) {
 		int line = 0;
 		int line_to = lines_skipped + (lines_visible > 0 ? lines_visible : 1);
 		FontDrawer drawer(font, font_outline_modulate);
-		while (wc) {
-			/* handle lines not meant to be drawn quickly */
-			if (line >= line_to)
-				break;
-			if (line < lines_skipped) {
 
-				while (wc && wc->char_pos >= 0)
-					wc = wc->next;
-				if (wc)
-					wc = wc->next;
-				line++;
-				continue;
-			}
+		if (path.size() > 0) {
 
-			/* handle lines normally */
-
-			if (wc->char_pos < 0) {
-				//empty line
-				wc = wc->next;
-				line++;
-				continue;
-			}
-
-			WordCache *from = wc;
-			WordCache *to = wc;
-
-			int taken = 0;
-			int spaces = 0;
-			while (to && to->char_pos >= 0) {
-
-				taken += to->pixel_width;
-				if (to != from && to->space_count) {
-					spaces += to->space_count;
+			// Handle drawing along a path
+			Transform2D global_transform = get_global_transform();
+			for (int i = 0; i < text.length(); ++i) {
+				draw_set_transform(Point2(0, 0), text_draw_angles.get(i), Size2(1, 1));
+				CharType c = xl_text[i];
+				CharType n = xl_text[i + 1];
+				if (uppercase) {
+					c = String::char_uppercase(c);
+					n = String::char_uppercase(n);
 				}
-				to = to->next;
+				drawer.draw_char(ci, text_draw_pos.get(i), c, n, font_color);
 			}
+			draw_set_transform_matrix(global_transform);
+		} else {
 
-			bool can_fill = to && to->char_pos == WordCache::CHAR_WRAPLINE;
+			// Handle drawing normally (without path)
+			while (wc) {
+				/* handle lines not meant to be drawn quickly */
+				if (line >= line_to)
+					break;
+				if (line < lines_skipped) {
 
-			float x_ofs = 0;
-
-			switch (align) {
-
-				case ALIGN_FILL:
-				case ALIGN_LEFT: {
-
-					x_ofs = style->get_offset().x;
-				} break;
-				case ALIGN_CENTER: {
-
-					x_ofs = int(size.width - (taken + spaces * space_w)) / 2;
-				} break;
-				case ALIGN_RIGHT: {
-
-					x_ofs = int(size.width - style->get_margin(MARGIN_RIGHT) - (taken + spaces * space_w));
-				} break;
-			}
-
-			float y_ofs = style->get_offset().y;
-			y_ofs += (line - lines_skipped) * font_h + font->get_ascent();
-			y_ofs += vbegin + line * vsep;
-
-			while (from != to) {
-
-				// draw a word
-				int pos = from->char_pos;
-				if (from->char_pos < 0) {
-
-					ERR_PRINT("BUG");
-					return;
+					while (wc && wc->char_pos >= 0)
+						wc = wc->next;
+					if (wc)
+						wc = wc->next;
+					line++;
+					continue;
 				}
-				if (from->space_count) {
-					/* spacing */
-					x_ofs += space_w * from->space_count;
-					if (can_fill && align == ALIGN_FILL && spaces) {
 
-						x_ofs += int((size.width - (taken + space_w * spaces)) / spaces);
+				/* handle lines normally */
+
+				if (wc->char_pos < 0) {
+					//empty line
+					wc = wc->next;
+					line++;
+					continue;
+				}
+
+				WordCache *from = wc;
+				WordCache *to = wc;
+
+				int taken = 0;
+				int spaces = 0;
+				while (to && to->char_pos >= 0) {
+
+					taken += to->pixel_width;
+					if (to != from && to->space_count) {
+						spaces += to->space_count;
 					}
+					to = to->next;
 				}
 
-				if (font_color_shadow.a > 0) {
+				bool can_fill = to && to->char_pos == WordCache::CHAR_WRAPLINE;
 
-					int chars_total_shadow = chars_total; //save chars drawn
-					float x_ofs_shadow = x_ofs;
+				float x_ofs = 0;
+
+				switch (align) {
+
+					case ALIGN_FILL:
+					case ALIGN_LEFT: {
+
+						x_ofs = style->get_offset().x;
+					} break;
+					case ALIGN_CENTER: {
+
+						x_ofs = int(size.width - (taken + spaces * space_w)) / 2;
+					} break;
+					case ALIGN_RIGHT: {
+
+						x_ofs = int(size.width - style->get_margin(MARGIN_RIGHT) - (taken + spaces * space_w));
+					} break;
+				}
+
+				float y_ofs = style->get_offset().y;
+				y_ofs += (line - lines_skipped) * font_h + font->get_ascent();
+				y_ofs += vbegin + line * vsep;
+
+				while (from != to) {
+
+					// draw a word
+					int pos = from->char_pos;
+					if (from->char_pos < 0) {
+
+						ERR_PRINT("BUG");
+						return;
+					}
+					if (from->space_count) {
+						/* spacing */
+						x_ofs += space_w * from->space_count;
+						if (can_fill && align == ALIGN_FILL && spaces) {
+
+							x_ofs += int((size.width - (taken + space_w * spaces)) / spaces);
+						}
+					}
+
+					if (font_color_shadow.a > 0) {
+
+						int chars_total_shadow = chars_total; //save chars drawn
+						float x_ofs_shadow = x_ofs;
+						for (int i = 0; i < from->word_len; i++) {
+
+							if (visible_chars < 0 || chars_total_shadow < visible_chars) {
+								CharType c = xl_text[i + pos];
+								CharType n = xl_text[i + pos + 1];
+								if (uppercase) {
+									c = String::char_uppercase(c);
+									n = String::char_uppercase(n);
+								}
+
+								float move = drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + shadow_ofs, c, n, font_color_shadow);
+								if (use_outline) {
+									drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(-shadow_ofs.x, shadow_ofs.y), c, n, font_color_shadow);
+									drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(shadow_ofs.x, -shadow_ofs.y), c, n, font_color_shadow);
+									drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(-shadow_ofs.x, -shadow_ofs.y), c, n, font_color_shadow);
+								}
+								x_ofs_shadow += move;
+								chars_total_shadow++;
+							}
+						}
+					}
 					for (int i = 0; i < from->word_len; i++) {
 
-						if (visible_chars < 0 || chars_total_shadow < visible_chars) {
+						if (visible_chars < 0 || chars_total < visible_chars) {
 							CharType c = xl_text[i + pos];
 							CharType n = xl_text[i + pos + 1];
 							if (uppercase) {
@@ -254,36 +294,16 @@ void Label::_notification(int p_what) {
 								n = String::char_uppercase(n);
 							}
 
-							float move = drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + shadow_ofs, c, n, font_color_shadow);
-							if (use_outline) {
-								drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(-shadow_ofs.x, shadow_ofs.y), c, n, font_color_shadow);
-								drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(shadow_ofs.x, -shadow_ofs.y), c, n, font_color_shadow);
-								drawer.draw_char(ci, Point2(x_ofs_shadow, y_ofs) + Vector2(-shadow_ofs.x, -shadow_ofs.y), c, n, font_color_shadow);
-							}
-							x_ofs_shadow += move;
-							chars_total_shadow++;
+							x_ofs += drawer.draw_char(ci, Point2(x_ofs, y_ofs), c, n, font_color);
+							chars_total++;
 						}
 					}
+					from = from->next;
 				}
-				for (int i = 0; i < from->word_len; i++) {
 
-					if (visible_chars < 0 || chars_total < visible_chars) {
-						CharType c = xl_text[i + pos];
-						CharType n = xl_text[i + pos + 1];
-						if (uppercase) {
-							c = String::char_uppercase(c);
-							n = String::char_uppercase(n);
-						}
-
-						x_ofs += drawer.draw_char(ci, Point2(x_ofs, y_ofs), c, n, font_color);
-						chars_total++;
-					}
-				}
-				from = from->next;
+				wc = to ? to->next : 0;
+				line++;
 			}
-
-			wc = to ? to->next : 0;
-			line++;
 		}
 	}
 
@@ -557,6 +577,11 @@ void Label::set_text(const String &p_string) {
 	word_cache_dirty = true;
 	if (percent_visible < 1)
 		visible_chars = get_total_character_count() * percent_visible;
+
+	char_widths_updated = false;
+	if (path.size() != 0 && text.length() != 0) {
+		compute_positions();
+	}
 	update();
 }
 
@@ -643,6 +668,172 @@ int Label::get_total_character_count() const {
 	return total_char_cache;
 }
 
+void Label::update_char_widths() {
+	Ref<Font> font = get_font("font");
+	int num_chars = text.length();
+	char_widths.resize(num_chars);
+	text_w = 0.0;
+	const CharType *sptr = &text[0];
+	for (int i = 0; i < num_chars; i++) {
+		real_t char_w = font->get_char_size(sptr[i], sptr[i + 1]).width;
+		char_widths.set(i, char_w);
+		text_w += char_w;
+	}
+	char_widths_updated = true;
+}
+
+void Label::invert_path() {
+	path.invert();
+	line_seg_lengths.invert();
+	line_seg_angles.invert();
+	int num_line_segs = path.size() - 1;
+	for (int i = 0; i < num_line_segs; ++i) {
+		line_seg_angles.set(i, -(M_PI - line_seg_angles.get(i)));
+	}
+}
+
+void Label::compute_positions() {
+	if (!char_widths_updated) {
+		update_char_widths();
+	}
+
+	int num_chars = text.length();
+	int num_points = path.size();
+	int num_line_segs = num_points - 1;
+
+	// Handle overflow
+	real_t overflow = (path_length - text_w) / 2;
+	if (overflow < 0) {
+
+		// Extend path leftwards
+		Point2 p1 = path.get(0);
+		Point2 p2 = path.get(1);
+		Vector2 offset = p1.direction_to(p2) * (-overflow);
+		Point2 new_point = p1 - offset;
+		path.set(0, new_point);
+		line_seg_lengths.set(0, line_seg_lengths.get(0) - overflow);
+
+		// Extend path rightwards
+		p1 = path.get(num_points - 1);
+		p2 = path.get(num_points - 2);
+		offset = p1.direction_to(p2) * (-overflow);
+		new_point = p1 - offset;
+		path.set(num_points - 1, new_point);
+		line_seg_lengths.set(num_line_segs - 1, line_seg_lengths.get(num_line_segs - 1) - overflow);
+
+		path_length += (2 * (-overflow));
+	}
+
+	if (autoinvert_path) {
+		real_t first_to_last_angle = (path.get(num_line_segs) - path.get(0)).angle();
+		if ((first_to_last_angle > M_PI_2 && first_to_last_angle < (3 * M_PI_2)) ||
+				(first_to_last_angle < -M_PI_2 && first_to_last_angle > -3 * M_PI_2)) {
+			invert_path();
+		}
+	}
+
+	int curr_line_seg = 0;
+	Point2 curr_line_seg_start = path.get(0);
+	Point2 next_line_seg_start = path.get(1);
+	Point2 curr_pos = curr_line_seg_start;
+	real_t to_walk = (overflow < 0) ? 0 : overflow;
+	text_draw_pos.resize(num_chars);
+	text_draw_angles.resize(num_chars);
+
+	// Walk path and compute draw positions
+	for (int i = 0; i < num_chars; ++i) {
+
+		while (to_walk > 0) {
+			real_t dist_to_next_ls = Math::abs((next_line_seg_start - curr_pos).length()); // would never be 0 since text is guaranteed to fit within path
+			if (to_walk >= dist_to_next_ls) {
+				curr_pos = next_line_seg_start;
+				to_walk -= dist_to_next_ls;
+				curr_line_seg_start = next_line_seg_start;
+				next_line_seg_start = path.get((++curr_line_seg) + 1);
+			} else {
+				curr_pos = curr_pos.linear_interpolate(next_line_seg_start, to_walk / dist_to_next_ls);
+				to_walk = 0;
+			}
+		}
+
+		float angle = line_seg_angles.get(curr_line_seg);
+		text_draw_angles.set(i, angle);
+		text_draw_pos.set(i, curr_pos.rotated(-angle));
+		to_walk = char_widths.get(i);
+	}
+}
+
+void Label::set_text_path(const Vector<Vector2> &p_path, bool p_autoinvert_path) {
+
+	int num_points = p_path.size();
+	if (num_points < 2) {
+		ERR_PRINT("Insufficient points in path: path needs at least two distinct points.");
+		return;
+	}
+
+	// Check for at least two distinct points in path
+	PoolIntArray distinct_points_idx;
+	distinct_points_idx.push_back(0);
+	for (int i = 1; i < num_points; ++i) {
+		if (p_path.get(i) != p_path.get(i - 1)) {
+			distinct_points_idx.push_back(i);
+		}
+	}
+	if (distinct_points_idx.size() < 2) {
+		ERR_PRINT("Insufficient points in path: path needs at least two distinct points.");
+		return;
+	}
+
+	// Build path properties
+	int num_distinct_points = distinct_points_idx.size();
+	int num_line_segs = num_distinct_points - 1;
+	path.resize(num_distinct_points);
+	path_length = 0.0;
+	line_seg_lengths.resize(num_line_segs);
+	line_seg_angles.resize(num_line_segs);
+	Point2 curr_point, next_point = p_path.get(distinct_points_idx.get(0));
+	for (int i = 0; i < num_line_segs; ++i) {
+		curr_point = next_point;
+		next_point = p_path.get(distinct_points_idx.get(i + 1));
+		Vector2 line_seg = next_point - curr_point;
+		real_t length = Math::abs(line_seg.length());
+
+		path.set(i, curr_point);
+		path_length += length;
+		line_seg_lengths.set(i, length);
+		line_seg_angles.set(i, line_seg.angle());
+	}
+	path.set(num_line_segs, next_point);
+	autoinvert_path = p_autoinvert_path;
+
+	if (text.length() != 0) {
+		compute_positions();
+		update();
+	}
+}
+
+Vector<Vector2> Label::get_text_path() const {
+	return path;
+}
+
+void Label::reset_path_properties() {
+	path.resize(0);
+	path_length = 0.0;
+	line_seg_lengths.resize(0);
+	line_seg_angles.resize(0);
+	autoinvert_path = false;
+
+	char_widths.resize(0);
+	text_w = 0.0;
+	char_widths_updated = false;
+	text_draw_pos.resize(0);
+	text_draw_angles.resize(0);
+}
+
+void Label::remove_text_path() {
+	reset_path_properties();
+}
+
 void Label::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_align", "align"), &Label::set_align);
@@ -669,6 +860,9 @@ void Label::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_lines_skipped"), &Label::get_lines_skipped);
 	ClassDB::bind_method(D_METHOD("set_max_lines_visible", "lines_visible"), &Label::set_max_lines_visible);
 	ClassDB::bind_method(D_METHOD("get_max_lines_visible"), &Label::get_max_lines_visible);
+	ClassDB::bind_method(D_METHOD("set_text_path", "path", "autoinvert_path"), &Label::set_text_path, DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("get_text_path"), &Label::get_text_path);
+	ClassDB::bind_method(D_METHOD("remove_text_path"), &Label::remove_text_path);
 
 	BIND_ENUM_CONSTANT(ALIGN_LEFT);
 	BIND_ENUM_CONSTANT(ALIGN_CENTER);
@@ -712,6 +906,8 @@ Label::Label(const String &p_text) {
 	set_text(p_text);
 	uppercase = false;
 	set_v_size_flags(SIZE_SHRINK_CENTER);
+
+	reset_path_properties();
 }
 
 Label::~Label() {

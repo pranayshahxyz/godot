@@ -98,6 +98,22 @@ private:
 	int lines_skipped;
 	int max_lines_visible;
 
+	/* Text along path */
+	Vector<Vector2> path;
+	real_t path_length;
+	bool autoinvert_path;
+	Vector<real_t> line_seg_lengths;
+	Vector<real_t> line_seg_angles;
+	Vector<real_t> char_widths;
+	real_t text_w;
+	bool char_widths_updated;
+	Vector<Vector2> text_draw_pos;
+	Vector<real_t> text_draw_angles;
+	void update_char_widths();
+	void compute_positions();
+	void invert_path();
+	void reset_path_properties();
+
 protected:
 	void _notification(int p_what);
 
@@ -140,6 +156,10 @@ public:
 	int get_line_height() const;
 	int get_line_count() const;
 	int get_visible_line_count() const;
+
+	void set_text_path(const Vector<Vector2> &p_path, bool p_autoinvert_path = false);
+	Vector<Vector2> get_text_path() const;
+	void remove_text_path();
 
 	Label(const String &p_text = String());
 	~Label();
